@@ -14,6 +14,7 @@ class PySparkIngestionPipeline:
         self.spark = SparkSession.builder \
             .appName(self.app_name) \
             .master("local[*]") \
+            .config("spark.jars.packages", "org.postgresql:postgresql:42.7.3") \
             .getOrCreate()
         return self
 
