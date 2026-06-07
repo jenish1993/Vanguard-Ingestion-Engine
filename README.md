@@ -1,4 +1,40 @@
-# Setup Guide
+# Vanguard Ingestion Engine
+
+## Project Structure
+
+```
+vanguard-ingestion-engine/
+├── Data/                              # Dataset storage
+│   ├── raw/                           # Raw input CSV files
+│   ├── batches/                       # Split batch CSV files
+│   └── data_splitter.py               # Script to split source data into batches
+├── config/                            # Environment configuration
+├── notebooks/                         # Jupyter notebooks (execution/test notebooks)
+│   ├── pipeline_notebook.ipynb
+│   └── test_pyspark_otf.ipynb
+├── research/                          # Research documents & flowcharts
+│   ├── auto_healing_langgraph.md
+│   └── auto_healing_pipeline_diagram.png
+├── src/                               # Source code
+│   ├── pipeline/                      # Core Spark ETL pipeline
+│   │   └── ingestion.py
+│   ├── schemas/                       # Database DDL & PySpark schemas
+│   │   ├── energy_consumption.py
+│   │   └── init_schema.sql
+│   ├── agent/                         # LangGraph state machine
+│   │   ├── state.py
+│   │   ├── nodes.py
+│   │   ├── edges.py
+│   │   └── graph.py
+│   └── healer/                        # AI / LangChain healer
+│       ├── schemas.py
+│       └── llm_client.py
+├── tests/                             # Unit tests
+├── pyproject.toml                     # Project dependencies
+└── README.md                          # Project documentation
+```
+
+## Setup Guide
 
 ## Environment Prerequisites
 
