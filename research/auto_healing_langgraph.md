@@ -46,7 +46,7 @@ class PipelineState(TypedDict):
     file_path: str                  # Path to the source CSV file
     df: Optional[DataFrame]         # The active PySpark DataFrame being processed
     error: Optional[str]            # Details of the last raised exception
-    last_failed_step: Optional[str] # Which step failed: "extract" or "load"
+    last_failed_step: Optional[str] # Which step failed: "extract", "transform", or "load"
     heal_attempts: int              # Counter to prevent infinite loops
     max_attempts: int               # Limit on healing retries
     heal_history: List[dict]        # Log of AI-generated healing actions applied
@@ -130,6 +130,31 @@ def extract_node(state: PipelineState) -> dict:
         return {
             "error": error_msg,
             "last_failed_step": "extract"
+        }
+```
+
+### Transform Node
+```python
+def transform_node(state: PipelineState) -> dict:
+    print("\n--- Executing Transform Node ---")
+    df = state["df"]
+    
+    if df is None:
+        return {"error": "DataFrame is empty, cannot transform.", "last_failed_step": "transform"}
+        
+    try:
+        # Assuming you inject your pipeline class or custom business transformations
+        # Here we mock the pipeline ingestion transform (Identity block placeholder)
+        # E.g., transformed_df = pipeline.transform(df)
+        
+        # For this illustration, we pass the df forward unmodified:
+        return {"df": df, "error": None}
+    except Exception as e:
+        error_msg = f"Transformation failed: {str(e)}\n{traceback.format_exc()}"
+        print(f"Error captured during transform: {e}")
+        return {
+            "error": error_msg,
+            "last_failed_step": "transform"
         }
 ```
 
@@ -251,42 +276,59 @@ def healer_node(state: PipelineState) -> dict:
 
 ## 6. Graph Routing and Compilation
 
-We need a router function to decide whether to stop or continue when an error is encountered.
+We define edge-routing functions for each step to handle errors, trigger healing, or advance to the next pipeline node.
 
 ```python
 from langgraph.graph import StateGraph, END
 
-# Conditional routing edge
-def route_after_step(state: PipelineState) -> str:
+# Conditional routing edge after Extract Node
+def route_after_extract(state: PipelineState) -> str:
     if state["error"] is not None:
-        if state["heal_attempts"] < state["max_attempts"]:
-            return "healer"
-        else:
-            return "fail"
-    else:
-        # If extract succeeded, move to load. If load succeeded, end.
-        if state["last_failed_step"] is None:
-            # First success must be extraction
-            return "load"
-        else:
-            # Succeeded loading
-            return "end"
+        return "healer" if state["heal_attempts"] < state["max_attempts"] else "fail"
+    return "transform"
+
+# Conditional routing edge after Transform Node
+def route_after_transform(state: PipelineState) -> str:
+    if state["error"] is not None:
+        return "healer" if state["heal_attempts"] < state["max_attempts"] else "fail"
+    return "load"
+
+# Conditional routing edge after Load Node
+def route_after_load(state: PipelineState) -> str:
+    if state["error"] is not None:
+        return "healer" if state["heal_attempts"] < state["max_attempts"] else "fail"
+    return "end"
+
+# Healer node routing: routes back to the specific step that failed to retry it
+def route_back_to_failed(state: PipelineState) -> str:
+    return state["last_failed_step"]
 
 # Compile graph
 workflow = StateGraph(PipelineState)
 
 # Add nodes
 workflow.add_node("extract", extract_node)
+workflow.add_node("transform", transform_node)
 workflow.add_node("load", load_node)
 workflow.add_node("healer", healer_node)
 
 # Set entry point
 workflow.set_entry_point("extract")
 
-# Add conditional edges
+# Add conditional edges to handle success vs error branches
 workflow.add_conditional_edges(
     "extract",
-    route_after_step,
+    route_after_extract,
+    {
+        "transform": "transform",
+        "healer": "healer",
+        "fail": END
+    }
+)
+
+workflow.add_conditional_edges(
+    "transform",
+    route_after_transform,
     {
         "load": "load",
         "healer": "healer",
@@ -296,7 +338,7 @@ workflow.add_conditional_edges(
 
 workflow.add_conditional_edges(
     "load",
-    route_after_step,
+    route_after_load,
     {
         "end": END,
         "healer": "healer",
@@ -304,15 +346,12 @@ workflow.add_conditional_edges(
     }
 )
 
-# Healer nodes routes back to the failed node to retry
-def route_back(state: PipelineState) -> str:
-    return state["last_failed_step"]
-
 workflow.add_conditional_edges(
     "healer",
-    route_back,
+    route_back_to_failed,
     {
         "extract": "extract",
+        "transform": "transform",
         "load": "load"
     }
 )
