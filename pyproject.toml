@@ -10,4 +10,8 @@ dependencies = [
     "pandas>=3.0.3",
     "pyspark==3.5.4",
     "setuptools>=82.0.1",
+    "langgraph>=0.1.23",
+    "langchain-google-genai>=0.1.1",
+    "langchain-core>=0.4.27",
+    "pydantic>=2.10.5"
 ]
